@@ -1,170 +1,169 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>A-Frame 1.7 VR Physics Example</title>
+<head>
+  <meta charset="utf-8" />
+  <title>A-Frame VR Physics</title>
 
-    <!-- A-Frame 1.7 -->
-    <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+  <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system@4.0.1/dist/aframe-physics-system.min.js"></script>
 
-    <!-- Physics (Cannon.js) -->
-    <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system@4.0.1/dist/aframe-physics-system.min.js"></script>
+  <script>
+    /* =========================
+       JOYSTICK PHYSICS MOVEMENT
+    ==========================*/
+    AFRAME.registerComponent("joystick-move", {
+      schema: {
+        speed: { default: 4 },
+        jumpForce: { default: 6 }
+      },
 
-    <!-- Extras (controls helpers) -->
-    <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
+      init() {
+        this.body = this.el.components["dynamic-body"].body;
+        this.dir = new THREE.Vector3();
+        this.right = new THREE.Vector3();
+        this.canJump = false;
 
-    <script>
-      /* ---------------------------
-         PLAYER MOVEMENT (JOYSTICK)
-      ----------------------------*/
-      AFRAME.registerComponent("vr-locomotion", {
-        schema: {
-          speed: { default: 4 },
-          jumpForce: { default: 6 }
-        },
+        // Jump (A button)
+        this.el.sceneEl.addEventListener("abuttondown", () => {
+          if (this.canJump) {
+            this.body.velocity.y = this.data.jumpForce;
+            this.canJump = false;
+          }
+        });
 
-        init() {
-          this.body = this.el.components["dynamic-body"].body;
-          this.direction = new THREE.Vector3();
-          this.canJump = false;
+        // Ground detection
+        this.el.addEventListener("collisions", e => {
+          this.canJump = true;
+        });
 
-          this.el.sceneEl.addEventListener("collisions", e => {
-            this.canJump = true;
+        // Left hand reference
+        this.leftHand = document.querySelector("#leftHand");
+      },
+
+      tick() {
+        if (!this.body || !this.leftHand) return;
+
+        const controller = this.leftHand.components["tracked-controls"];
+        if (!controller || !controller.controller) return;
+
+        const axes = controller.controller.axes;
+        const x = axes[2] || 0;
+        const z = axes[3] || 0;
+
+        if (Math.abs(x) < 0.1 && Math.abs(z) < 0.1) return;
+
+        const cam = this.el.querySelector("[camera]");
+        cam.object3D.getWorldDirection(this.dir);
+        this.dir.y = 0;
+        this.dir.normalize();
+
+        this.right.crossVectors(this.dir, new THREE.Vector3(0, 1, 0));
+
+        this.body.velocity.x =
+          (this.dir.x * -z + this.right.x * x) * this.data.speed;
+        this.body.velocity.z =
+          (this.dir.z * -z + this.right.z * x) * this.data.speed;
+      }
+    });
+
+    /* =========================
+       GRAB & THROW
+    ==========================*/
+    AFRAME.registerComponent("grabber", {
+      init() {
+        this.grabbed = null;
+
+        this.el.addEventListener("gripdown", () => {
+          const hit = this.el.components.raycaster?.intersectedEls[0];
+          if (!hit || !hit.components["dynamic-body"]) return;
+
+          this.grabbed = hit;
+          hit.body.sleep();
+          hit.setAttribute("constraint", {
+            type: "lock",
+            target: `#${this.el.id}`
           });
+        });
 
-          this.el.sceneEl.addEventListener("abuttondown", () => {
-            if (this.canJump) {
-              this.body.velocity.y = this.data.jumpForce;
-              this.canJump = false;
-            }
-          });
-        },
+        this.el.addEventListener("gripup", () => {
+          if (!this.grabbed) return;
 
-        tick(_, delta) {
-          if (!this.body) return;
-
-          const gamepad = navigator.getGamepads?.()[0];
-          if (!gamepad) return;
-
-          const x = gamepad.axes[2] || 0;
-          const z = gamepad.axes[3] || 0;
-
-          if (Math.abs(x) < 0.1 && Math.abs(z) < 0.1) return;
-
-          const camera = document.querySelector("[camera]");
-          camera.object3D.getWorldDirection(this.direction);
-          this.direction.y = 0;
-          this.direction.normalize();
-
-          const right = new THREE.Vector3();
-          right.crossVectors(this.direction, new THREE.Vector3(0, 1, 0));
-
-          this.body.velocity.x =
-            (this.direction.x * -z + right.x * x) * this.data.speed;
-          this.body.velocity.z =
-            (this.direction.z * -z + right.z * x) * this.data.speed;
-        }
-      });
-
-      /* ---------------------------
-         GRAB + THROW
-      ----------------------------*/
-      AFRAME.registerComponent("grabber", {
-        init() {
+          this.grabbed.removeAttribute("constraint");
+          this.grabbed.body.wakeUp();
           this.grabbed = null;
+        });
+      }
+    });
+  </script>
+</head>
 
-          this.el.addEventListener("gripdown", () => {
-            const hit = this.el.components.raycaster?.intersectedEls[0];
-            if (!hit || !hit.components["dynamic-body"]) return;
+<body>
+<a-scene physics="driver: cannon; gravity: -9.8">
 
-            this.grabbed = hit;
-            hit.body.sleep();
-            hit.setAttribute("constraint", {
-              type: "lock",
-              target: `#${this.el.id}`
-            });
-          });
+  <!-- PLAYER (PHYSICS ROOT) -->
+  <a-entity
+    id="player"
+    position="0 1.6 0"
+    dynamic-body="shape: capsule; radius: 0.25; height: 1.6"
+    joystick-move
+  >
 
-          this.el.addEventListener("gripup", () => {
-            if (!this.grabbed) return;
+    <!-- CAMERA -->
+    <a-camera></a-camera>
 
-            this.grabbed.removeAttribute("constraint");
-            this.grabbed.body.wakeUp();
-            this.grabbed = null;
-          });
-        }
-      });
-    </script>
-  </head>
+    <!-- HANDS (CHILD OF PLAYER) -->
+    <a-entity
+      id="leftHand"
+      hand-controls="hand: left"
+      raycaster="objects: .grabbable"
+      grabber
+    ></a-entity>
 
-  <body>
-    <a-scene
-      physics="driver: cannon; gravity: -9.8"
-      vr-mode-ui="enabled: true"
-    >
-      <!-- PLAYER -->
-      <a-entity
-        id="player"
-        position="0 1.6 0"
-        dynamic-body="shape: capsule; radius: 0.25; height: 1.6"
-        vr-locomotion
-      >
-        <a-camera></a-camera>
-      </a-entity>
+    <a-entity
+      id="rightHand"
+      hand-controls="hand: right"
+      raycaster="objects: .grabbable"
+      grabber
+    ></a-entity>
 
-      <!-- HANDS -->
-      <a-entity
-        id="leftHand"
-        hand-controls="hand: left"
-        raycaster="objects: .grabbable"
-        grabber
-      ></a-entity>
+  </a-entity>
 
-      <a-entity
-        id="rightHand"
-        hand-controls="hand: right"
-        raycaster="objects: .grabbable"
-        grabber
-      ></a-entity>
+  <!-- FLOOR -->
+  <a-box
+    static-body
+    position="0 -0.5 0"
+    scale="20 1 20"
+    color="#7BC8A4"
+  ></a-box>
 
-      <!-- FLOOR -->
-      <a-box
-        position="0 -0.5 0"
-        scale="20 1 20"
-        static-body
-        color="#7BC8A4"
-      ></a-box>
+  <!-- PLATFORM -->
+  <a-box
+    static-body
+    position="0 1 -3"
+    scale="2 0.5 2"
+    color="#FFC65D"
+  ></a-box>
 
-      <!-- JUMP PLATFORM -->
-      <a-box
-        position="0 1 -3"
-        scale="2 0.5 2"
-        static-body
-        color="#FFC65D"
-      ></a-box>
+  <!-- OBJECTS -->
+  <a-sphere
+    class="grabbable"
+    dynamic-body
+    position="1 2 -2"
+    radius="0.2"
+    color="#EF2D5E"
+  ></a-sphere>
 
-      <!-- PHYSICS OBJECTS -->
-      <a-sphere
-        class="grabbable"
-        id="ball1"
-        position="1 2 -2"
-        radius="0.2"
-        dynamic-body
-        color="#EF2D5E"
-      ></a-sphere>
+  <a-box
+    class="grabbable"
+    dynamic-body
+    position="-1 2 -2"
+    scale="0.3 0.3 0.3"
+    color="#4CC3D9"
+  ></a-box>
 
-      <a-box
-        class="grabbable"
-        id="box1"
-        position="-1 2 -2"
-        scale="0.3 0.3 0.3"
-        dynamic-body
-        color="#4CC3D9"
-      ></a-box>
+  <a-light type="ambient" intensity="0.5"></a-light>
+  <a-light type="directional" position="1 3 2"></a-light>
 
-      <!-- LIGHT -->
-      <a-light type="ambient" intensity="0.5"></a-light>
-      <a-light type="directional" position="1 3 2"></a-light>
-    </a-scene>
-  </body>
+</a-scene>
+</body>
 </html>
