@@ -8,281 +8,43 @@
   <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system@4.0.1/dist/aframe-physics-system.min.js"></script>
 
   <script>
-  // -----------------------
-  // Player movement component
-  // -----------------------
-  AFRAME.registerComponent('player-controls', {
-    schema: {
-      speed: { type: 'number', default: 4 },
-      jumpForce: { type: 'number', default: 6 },
-      axisDeadzone: { type: 'number', default: 0.12 }
-    },
+  AFRAME.registerComponent('thumbstick-logging',{
+  init: function () {
+    this.el.addEventListener('thumbstickmoved', this.logThumbstick);
+  },
+  logThumbstick: function (evt) {
+    // move player in the direction the camera is facing
+    var playerEl = document.querySelector('#player');
+    if (!playerEl) { return; }
+    var body = playerEl.body || (playerEl.components && playerEl.components['dynamic-body'] && playerEl.components['dynamic-body'].body);
+    if (!body) { return; }
 
-    init: function () {
-      this.body = null;                 // cannon body for the player
-      this.leftHand = document.querySelector('#leftHand');
-      this.camera = this.el.querySelector('[camera]') || document.querySelector('a-camera');
-      this.grounded = false;
-      this.raycaster = new THREE.Raycaster();
-      this.tmpVec = new THREE.Vector3();
+    var cam = playerEl.querySelector('a-camera') || document.querySelector('a-camera');
+    if (!cam) { return; }
 
-      // Wait until dynamic-body is ready
-      this.waitForBody();
-      // Jump on A button
-      this.onA = () => {
-        if (!this.body) return;
-        if (this.isGrounded()) {
-          this.body.velocity.y = this.data.jumpForce;
-        }
-      };
-      this.el.sceneEl.addEventListener('abuttondown', this.onA);
-    },
+    // forward (on XZ plane) and right vectors
+    var forward = new THREE.Vector3();
+    cam.object3D.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
 
-    remove: function () {
-      this.el.sceneEl.removeEventListener('abuttondown', this.onA);
-    },
+    var right = new THREE.Vector3();
+    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
-    waitForBody: function () {
-      if (this.el.components['dynamic-body'] && this.el.components['dynamic-body'].body) {
-        this.body = this.el.components['dynamic-body'].body;
-        return;
-      }
-      // poll until available
-      const poll = setInterval(() => {
-        if (this.el.components['dynamic-body'] && this.el.components['dynamic-body'].body) {
-          this.body = this.el.components['dynamic-body'].body;
-          clearInterval(poll);
-        }
-      }, 50);
-    },
+    // joystick axes (apply small deadzone). invert Y so pushing up moves forward.
+    var deadzone = 0.15;
+    var lx = Math.abs(evt.detail.x) > deadzone ? evt.detail.x : 0;
+    var ly = Math.abs(evt.detail.y) > deadzone ? -evt.detail.y : 0;
 
-    isGrounded: function () {
-      // Raycast down from player world position (use three meshes)
-      const worldPos = new THREE.Vector3();
-      this.el.object3D.getWorldPosition(worldPos);
-      const origin = worldPos.clone();
-      origin.y += 0.1; // small offset above bottom
-      const down = new THREE.Vector3(0, -1, 0);
-      this.raycaster.set(origin, down);
-      const hits = this.raycaster.intersectObjects(this.el.sceneEl.object3D.children, true);
-      // find first hit that's not the player itself and within small distance
-      for (let i = 0; i < hits.length; i++) {
-        const hit = hits[i];
-        if (!hit.object) continue;
-        const distance = hit.distance;
-        if (distance <= 0.6) {
-          // ignore hits on camera/hands by checking for entity ownership
-          let parentEl = hit.object.el;
-          if (!parentEl) return true;
-          // if hit entity is not the player rig itself
-          if (parentEl !== this.el) return true;
-        }
-      }
-      return false;
-    },
+    var speed = 4; // meters/sec - tweak to taste
+    var move = new THREE.Vector3();
+    move.copy(forward).multiplyScalar(ly * speed);
+    move.addScaledVector(right, lx * speed);
 
-    tick: function (time, dt) {
-      if (!this.body) return;
-      // read axes from left hand's tracked-controls if present
-      let x = 0, z = 0;
-      const left = this.leftHand;
-      if (left && left.components && left.components['tracked-controls'] && left.components['tracked-controls'].controller) {
-        const gp = left.components['tracked-controls'].controller;
-        const axes = gp.axes || [];
-        // many controllers use axes[2], axes[3] for thumbstick; fallback to 0/1
-        x = axes[2] !== undefined ? axes[2] : (axes[0] || 0);
-        z = axes[3] !== undefined ? axes[3] : (axes[1] || 0);
-        console.log('axes', x, z);
-      } else {
-        // fallback: try navigator.getGamepads
-        const gps = navigator.getGamepads && navigator.getGamepads();
-        for (let i = 0; i < (gps ? gps.length : 0); i++) {
-          const g = gps[i];
-          if (!g) continue;
-          // choose first with axes
-          if (g.axes && g.axes.length >= 2) {
-            x = g.axes[2] !== undefined ? g.axes[2] : g.axes[0];
-            z = g.axes[3] !== undefined ? g.axes[3] : g.axes[1];
-            break;
-          }
-        }
-      }
-
-      // apply deadzone
-      if (Math.abs(x) < this.data.axisDeadzone) x = 0;
-      if (Math.abs(z) < this.data.axisDeadzone) z = 0;
-      if (x === 0 && z === 0) return;
-
-      // compute forward vector from camera
-      const camObj = this.camera.object3D;
-      camObj.getWorldDirection(this.tmpVec);
-      this.tmpVec.y = 0;
-      this.tmpVec.normalize();
-
-      // right vector
-      const right = new THREE.Vector3();
-      right.crossVectors(this.tmpVec, new THREE.Vector3(0, 1, 0)).normalize();
-
-      // desired velocity (preserve Y velocity)
-      const speed = this.data.speed;
-      const vx = (this.tmpVec.x * -z + right.x * x) * speed;
-      const vz = (this.tmpVec.z * -z + right.z * x) * speed;
-
-      this.body.velocity.x = vx;
-      this.body.velocity.z = vz;
-    }
-  });
-
-
-  // -----------------------
-  // Kinematic hand component
-  // - creates a dynamic-body and turns it into kinematic
-  // - keeps cannon body in sync with controller pose
-  // -----------------------
-  AFRAME.registerComponent('kinematic-hand', {
-    schema: { radius: { default: 0.06 } },
-
-    init: function () {
-      this.body = null;
-      this.lastPos = new THREE.Vector3();
-      this.lastTime = null;
-      this.el.setAttribute('dynamic-body', `shape: sphere; sphereRadius: ${this.data.radius}; mass: 0.001`); // tiny mass
-      // add raycaster for grabbing
-      this.el.setAttribute('raycaster', 'objects: .grabbable; far: 1.5');
-      this.waitForBody();
-    },
-
-    waitForBody: function () {
-      if (this.el.components['dynamic-body'] && this.el.components['dynamic-body'].body) {
-        this._onBodyReady();
-        return;
-      }
-      const poll = setInterval(() => {
-        if (this.el.components['dynamic-body'] && this.el.components['dynamic-body'].body) {
-          clearInterval(poll);
-          this._onBodyReady();
-        }
-      }, 30);
-    },
-
-    _onBodyReady: function () {
-      this.body = this.el.components['dynamic-body'].body;
-      // try to set as kinematic so it can be driven by pose
-      if (window.CANNON && this.body.type !== window.CANNON.Body.KINEMATIC) {
-        this.body.type = window.CANNON.Body.KINEMATIC;
-        this.body.updateMassProperties();
-      }
-      // initialize last pos
-      this.el.object3D.getWorldPosition(this.lastPos);
-      this.lastTime = performance.now();
-    },
-
-    tick: function (time, dt) {
-      if (!this.body) return;
-      const pos = new THREE.Vector3();
-      const quat = new THREE.Quaternion();
-      this.el.object3D.getWorldPosition(pos);
-      this.el.object3D.getWorldQuaternion(quat);
-
-      // set cannon body position/quaternion from three.js
-      this.body.position.set(pos.x, pos.y, pos.z);
-      this.body.quaternion.set(quat.x, quat.y, quat.z, quat.w);
-
-      // approximate velocity for throw (linear)
-      const now = performance.now();
-      const delta = (now - this.lastTime) / 1000;
-      if (delta > 0) {
-        const v = pos.clone().sub(this.lastPos).multiplyScalar(1 / delta);
-        this.body.velocity.set(v.x, v.y, v.z);
-      }
-      this.lastPos.copy(pos);
-      this.lastTime = now;
-    }
-  });
-
-AFRAME.registerComponent('debug-text', {
-  init() {
-    this.textEl = document.createElement('a-text');
-    this.textEl.setAttribute('position', '0 1.6 -1.5');
-    this.textEl.setAttribute('width', '2');
-    this.el.sceneEl.appendChild(this.textEl);
-
-    this.lines = [];
-    console._log = console.log;
-    console.log = (...args) => {
-      this.lines.push(args.join(' '));
-      this.lines = this.lines.slice(-6);
-      this.textEl.setAttribute('value', this.lines.join('\n'));
-      console._log(...args);
-    };
+    // apply to physics body (preserve vertical velocity)
+    body.velocity.set(move.x, body.velocity.y, move.z);
   }
 });
-
-  // -----------------------
-  // Grabber component
-  // - uses physics constraint lock to grab objects that have dynamic-body
-  // - on release, applies controller velocity to the object for throwing
-  // -----------------------
-  AFRAME.registerComponent('grabber', {
-    init: function () {
-      this.grabbed = null;
-      this.onGripDown = this.onGripDown.bind(this);
-      this.onGripUp = this.onGripUp.bind(this);
-      this.el.addEventListener('gripdown', this.onGripDown);
-      this.el.addEventListener('gripup', this.onGripUp);
-    },
-
-    remove: function () {
-      this.el.removeEventListener('gripdown', this.onGripDown);
-      this.el.removeEventListener('gripup', this.onGripUp);
-    },
-
-    onGripDown: function () {
-      // find first intersected element by raycaster
-      const intersected = this.el.components.raycaster && this.el.components.raycaster.intersectedEls;
-      const hit = intersected && intersected.length ? intersected[0] : null;
-      if (!hit) return;
-      if (!hit.components['dynamic-body']) return;
-
-      // set constraint (lock) to this hand
-      hit.setAttribute('constraint', {
-        type: 'lock',
-        target: `#${this.el.id}`
-      });
-
-      // record grabbed entity
-      this.grabbed = hit;
-
-      // small sleep to stabilize
-      if (hit.body) hit.body.sleep();
-    },
-
-    onGripUp: function () {
-      if (!this.grabbed) return;
-      const obj = this.grabbed;
-
-      // remove constraint
-      obj.removeAttribute('constraint');
-
-      // wake body and apply hand's velocity to object for throw
-      const objBody = obj.components['dynamic-body'] && obj.components['dynamic-body'].body;
-      const handBody = this.el.components['dynamic-body'] && this.el.components['dynamic-body'].body;
-      if (objBody) {
-        if (handBody) {
-          // apply the hand's cannon velocity * multiplier
-          const vx = handBody.velocity.x;
-          const vy = handBody.velocity.y;
-          const vz = handBody.velocity.z;
-          const throwMultiplier = 1.6;
-          objBody.velocity.set(vx * throwMultiplier, vy * throwMultiplier, vz * throwMultiplier);
-        } else {
-          objBody.wakeUp();
-        }
-      }
-
-      this.grabbed = null;
-    }
-  });
   </script>
 </head>
 
@@ -317,15 +79,6 @@ AFRAME.registerComponent('debug-text', {
     <a-box position="0 -0.6 0" static-body scale="40 1 40" color="#7BC8A4"></a-box>
 
     <!-- platform to jump onto -->
-    <a-box position="0 0.6 -3" static-body scale="3 0.5 3" color="#FFC65D"></a-box>
-
-    <!-- small obstacles -->
-    <a-box position="-2 0.2 -2" static-body scale="1 0.4 1" color="#AAA"></a-box>
-    <a-box position="2 0.2 -1.5" static-body scale="1 0.4 1" color="#BBB"></a-box>
-
-    <!-- grabbable objects (dynamic) -->
-    <a-sphere class="grabbable" position="1 1 -2" radius="0.18" dynamic-body color="#EF2D5E"></a-sphere>
-    <a-box class="grabbable" position="-1 1 -2" scale="0.3 0.3 0.3" dynamic-body color="#4CC3D9"></a-box>
 
     <!-- some taller boxes you can jump onto -->
     <a-box position="0 1.6 -6" static-body scale="2 0.6 2" color="#8F8"></a-box>
@@ -335,11 +88,7 @@ AFRAME.registerComponent('debug-text', {
     <a-light type="directional" intensity="0.6" position="1 4 2"></a-light>
 
     <!-- helpful cursor for desktop testing -->
-    <a-entity cursor="fuse:false; rayOrigin:mouse"
-              raycaster="objects: .grabbable"
-              position="0 0 -1">
-      <a-ring radius-inner="0.01" radius-outer="0.02" position="0 0 -1"></a-ring>
-    </a-entity>
+   
   </a-scene>
 </body>
 </html>
