@@ -47,6 +47,90 @@
     body.velocity.set(move.x, body.velocity.y, move.z);
   }
 });
+// create an on-scene console text display
+window.addEventListener('load', function () {
+    var scene = document.querySelector('a-scene');
+    if (!scene) { return; }
+
+    // buffer for recent lines
+    var maxLines = 20;
+    var lines = [];
+
+    function pushLine(prefix, args) {
+        var text = args.map(function (a) {
+            try {
+                if (typeof a === 'object') return JSON.stringify(a);
+                return String(a);
+            } catch (e) {
+                return String(a);
+            }
+        }).join(' ');
+        var timestamp = new Date().toLocaleTimeString();
+        lines.push('[' + timestamp + ']' + (prefix ? ' ' + prefix : '') + ' ' + text);
+        if (lines.length > maxLines) lines = lines.slice(lines.length - maxLines);
+        refreshText();
+    }
+
+    // create container at 0 1 0
+    var container = document.createElement('a-entity');
+    container.setAttribute('position', '0 1 0');
+
+    // background panel for readability
+    var bg = document.createElement('a-plane');
+    bg.setAttribute('width', '2');
+    bg.setAttribute('height', '1');
+    bg.setAttribute('color', '#111');
+    bg.setAttribute('material', 'opacity: 0.6; side: double');
+    bg.setAttribute('position', '0 0 0');
+    container.appendChild(bg);
+
+    // text element
+    var textEl = document.createElement('a-entity');
+    textEl.setAttribute('position', '-0.95 0 0.01'); // left align, slightly in front of panel
+    textEl.setAttribute('text', {
+        value: '',
+        align: 'left',
+        width: 1.9,
+        color: '#fff',
+        wrapCount: 40
+    });
+    container.appendChild(textEl);
+
+    scene.appendChild(container);
+
+    function refreshText() {
+        textEl.setAttribute('text', 'value', lines.join('\n'));
+    }
+
+    // preserve originals
+    var orig = {
+        log: console.log.bind(console),
+        info: console.info.bind(console),
+        warn: console.warn.bind(console),
+        error: console.error.bind(console)
+    };
+
+    // override console methods to mirror to text
+    console.log = function () {
+        orig.log.apply(null, arguments);
+        pushLine('', Array.prototype.slice.call(arguments));
+    };
+    console.info = function () {
+        orig.info.apply(null, arguments);
+        pushLine('INFO', Array.prototype.slice.call(arguments));
+    };
+    console.warn = function () {
+        orig.warn.apply(null, arguments);
+        pushLine('WARN', Array.prototype.slice.call(arguments));
+    };
+    console.error = function () {
+        orig.error.apply(null, arguments);
+        pushLine('ERROR', Array.prototype.slice.call(arguments));
+    };
+
+    // seed with a notice
+    pushLine('INFO', ['Console capture started']);
+});
   </script>
 </head>
 
