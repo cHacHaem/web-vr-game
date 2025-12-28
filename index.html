@@ -14,6 +14,7 @@
     this.el.addEventListener('thumbstickmoved', this.logThumbstick);
   },
   logThumbstick: function (evt) {
+    console.log('thumbstick moved', evt.detail);
     // move player in the direction the camera is facing
     var playerEl = document.querySelector('#player');
     if (!playerEl) { return; }
