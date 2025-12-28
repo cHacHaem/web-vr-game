@@ -5,7 +5,7 @@
     <title>Flying Platform Demo</title>
 
     <!-- A-Frame -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
 
     <!-- Environment component -->
     <script src="https://unpkg.com/aframe-environment-component@1.4.0/dist/aframe-environment-component.min.js"></script>
@@ -15,7 +15,9 @@
 
   <body>
     <a-scene fog="type: exponential; density: 0.015">
-
+      <a-assets>
+        <a-asset-item id="chair" src="/chair.glb"></a-asset-item>
+      </a-assets>
       <!-- WORLD -->
       <a-entity
         environment="
@@ -34,7 +36,8 @@
 
         <!-- CAMERA RIG -->
         <a-entity id="rig" position="0 1.6 0" animation="property: position; to: 1 20 -50; dur: 3000; easing: linear; loop: true">
-          <a-camera
+          <a-gltf-model src="#chair" scale="0.5 0.5 0.5" position="0 -2"></a-gltf-model>
+            <a-camera
             wasd-controls="enabled: false"
             look-controls>
           </a-camera>
