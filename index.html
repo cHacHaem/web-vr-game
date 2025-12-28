@@ -92,6 +92,7 @@
         // many controllers use axes[2], axes[3] for thumbstick; fallback to 0/1
         x = axes[2] !== undefined ? axes[2] : (axes[0] || 0);
         z = axes[3] !== undefined ? axes[3] : (axes[1] || 0);
+        console.log('axes', x, z);
       } else {
         // fallback: try navigator.getGamepads
         const gps = navigator.getGamepads && navigator.getGamepads();
