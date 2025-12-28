@@ -11,14 +11,6 @@
     <script src="https://unpkg.com/aframe-environment-component@1.4.0/dist/aframe-environment-component.min.js"></script>
 
     <!-- Optional: smoothing -->
-    <script>
-      AFRAME.registerComponent('fly-forward', {
-        schema: { speed: { default: 0.02 } },
-        tick() {
-          this.el.object3D.position.z -= this.data.speed
-        }
-      })
-    </script>
   </head>
 
   <body>
@@ -27,8 +19,7 @@
       <!-- WORLD -->
       <a-entity
         environment="
-          preset: canyon;
-          ground: hills;
+          preset: forest;
           groundColor: #553311;
           skyType: gradient;
           skyColor: #88ccee;
@@ -39,18 +30,22 @@
       </a-entity>
 
       <!-- VEHICLE (this is what you tilt) -->
-      <a-entity id="vehicle" fly-forward>
+      <a-entity id="vehicle">
 
         <!-- CAMERA RIG -->
-        <a-entity id="rig" position="0 1.6 0">
+        <a-entity id="rig" position="0 1.6 0" animation="property: position; to: 1 20 -50; dur: 3000; easing: linear; loop: true">
           <a-camera
             wasd-controls="enabled: false"
-            look-controls="pointerLockEnabled: false">
+            look-controls>
           </a-camera>
+          
         </a-entity>
 
       </a-entity>
 
     </a-scene>
+    <script>
+
+    </script>
   </body>
 </html>
