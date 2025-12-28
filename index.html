@@ -1,31 +1,83 @@
+<!DOCTYPE html>
 <html>
   <head>
+    <meta charset="utf-8" />
+    <title>A-Frame VR Locomotion + Physics</title>
+
+    <!-- A-Frame 1.7 -->
     <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system/dist/aframe-physics-system.min.js"></script>
+
+    <!-- Cannon physics -->
+    <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system@4.0.1/dist/aframe-physics-system.min.js"></script>
+
+    <!-- Locomotion + snap turn -->
     <script src="https://cdn.jsdelivr.net/npm/aframe-locomotion/dist/aframe-locomotion.umd.min.js"></script>
-    <script src="https://unpkg.com/super-hands/dist/super-hands.min.js"></script>
   </head>
+
   <body>
-    <a-scene physics="driver: cannon">
+    <a-scene physics="driver: cannon; gravity: -9.8">
 
-      <a-entity id="rig" dynamic-body="shape:capsule; height:1.6; radius:0.25">
-        <a-camera id="camera"></a-camera>
+      <!-- ========= PLAYER RIG (PHYSICS ROOT) ========= -->
+      <a-entity
+        id="rig"
+        position="0 1.6 0"
+        dynamic-body="shape: capsule; height: 1.6; radius: 0.25"
+      >
 
-        <!-- Movement with joystick -->
-        <a-entity hand-controls="hand: left"
-                  smooth-locomotion="target: #rig; reference: #camera">
-        </a-entity>
+        <!-- CAMERA (HEAD) -->
+        <a-camera id="camera" wasd-controls="enabled:false"></a-camera>
 
-        <!-- Hands with grabbing -->
-        <a-entity hand-controls="hand: right"
-                  super-hands>
-        </a-entity>
+        <!-- LEFT HAND: JOYSTICK MOVEMENT -->
+        <a-entity
+          hand-controls="hand: left"
+          smooth-locomotion="
+            target: #rig;
+            reference: #camera;
+            speed: 3;
+          "
+        ></a-entity>
+
+        <!-- RIGHT HAND: SNAP TURN -->
+        <a-entity
+          hand-controls="hand: right"
+          snap-turn="
+            target: #rig;
+            reference: #camera;
+            snapAngle: 45;
+          "
+        ></a-entity>
 
       </a-entity>
 
-      <a-box static-body position="0 -0.5 0" scale="20 1 20"></a-box>
+      <!-- ========= WORLD ========= -->
 
-      <a-sphere class="grabbable" dynamic-body position="1 2 -2" radius="0.3"></a-sphere>
+      <!-- FLOOR -->
+      <a-box
+        static-body
+        position="0 -0.5 0"
+        scale="30 1 30"
+        color="#7BC8A4"
+      ></a-box>
+
+      <!-- PLATFORM -->
+      <a-box
+        static-body
+        position="0 1 -4"
+        scale="3 0.5 3"
+        color="#FFC65D"
+      ></a-box>
+
+      <!-- WALL -->
+      <a-box
+        static-body
+        position="0 2 -8"
+        scale="6 4 0.5"
+        color="#AAA"
+      ></a-box>
+
+      <!-- LIGHT -->
+      <a-light type="ambient" intensity="0.5"></a-light>
+      <a-light type="directional" position="2 4 1"></a-light>
 
     </a-scene>
   </body>
