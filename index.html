@@ -199,6 +199,23 @@
     }
   });
 
+AFRAME.registerComponent('debug-text', {
+  init() {
+    this.textEl = document.createElement('a-text');
+    this.textEl.setAttribute('position', '0 1.6 -1.5');
+    this.textEl.setAttribute('width', '2');
+    this.el.sceneEl.appendChild(this.textEl);
+
+    this.lines = [];
+    console._log = console.log;
+    console.log = (...args) => {
+      this.lines.push(args.join(' '));
+      this.lines = this.lines.slice(-6);
+      this.textEl.setAttribute('value', this.lines.join('\n'));
+      console._log(...args);
+    };
+  }
+});
 
   // -----------------------
   // Grabber component
@@ -273,7 +290,7 @@
 
     <!-- ========== PLAYER SPHERE (physics root) ========== -->
     <!-- sphere used as the player body; camera + hands are children -->
-    <a-entity id="player" position="0 1.2 0" dynamic-body="shape: sphere; sphereRadius: 0.4; mass: 80" player-controls>
+    <a-entity id="player" position="0 1.2 0" dynamic-body="shape: sphere; sphereRadius: 0.4; mass: 80" player-controls debug-text>
       <!-- a simple camera -->
       <a-camera position="0 0.25 0"></a-camera>
 
