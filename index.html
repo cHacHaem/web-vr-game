@@ -1,180 +1,56 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <title>A-Frame 1.7 — Physics Player + Joystick + Jump + Grab/Throw</title>
+  <head>
+    <meta charset="utf-8">
+    <title>Flying Platform Demo</title>
 
-  <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system@4.0.1/dist/aframe-physics-system.min.js"></script>
-<script src="node_modules/eruda/eruda.js"></script>
-<script>eruda.init();</script>
-  <script>
-  AFRAME.registerComponent('thumbstick-logging',{
-  init: function () {
-    this.el.addEventListener('thumbstickmoved', this.logThumbstick);
-  },
-  logThumbstick: function (evt) {
-    console.log('thumbstick moved', evt.detail);
-    // move player in the direction the camera is facing
-    var playerEl = document.querySelector('#player');
-    if (!playerEl) { return; }
-    var body = playerEl.body || (playerEl.components && playerEl.components['dynamic-body'] && playerEl.components['dynamic-body'].body);
-    if (!body) { return; }
+    <!-- A-Frame -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
-    var cam = playerEl.querySelector('a-camera') || document.querySelector('a-camera');
-    if (!cam) { return; }
+    <!-- Environment component -->
+    <script src="https://unpkg.com/aframe-environment-component@1.4.0/dist/aframe-environment-component.min.js"></script>
 
-    // forward (on XZ plane) and right vectors
-    var forward = new THREE.Vector3();
-    cam.object3D.getWorldDirection(forward);
-    forward.y = 0;
-    forward.normalize();
+    <!-- Optional: smoothing -->
+    <script>
+      AFRAME.registerComponent('fly-forward', {
+        schema: { speed: { default: 0.02 } },
+        tick() {
+          this.el.object3D.position.z -= this.data.speed
+        }
+      })
+    </script>
+  </head>
 
-    var right = new THREE.Vector3();
-    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+  <body>
+    <a-scene fog="type: exponential; density: 0.015">
 
-    // joystick axes (apply small deadzone). invert Y so pushing up moves forward.
-    var deadzone = 0.15;
-    var lx = Math.abs(evt.detail.x) > deadzone ? evt.detail.x : 0;
-    var ly = Math.abs(evt.detail.y) > deadzone ? -evt.detail.y : 0;
-
-    var speed = 4; // meters/sec - tweak to taste
-    var move = new THREE.Vector3();
-    move.copy(forward).multiplyScalar(ly * speed);
-    move.addScaledVector(right, lx * speed);
-
-    // apply to physics body (preserve vertical velocity)
-    body.velocity.set(move.x, body.velocity.y, move.z);
-  }
-});
-// create an on-scene console text display
-window.addEventListener('load', function () {
-    var scene = document.querySelector('a-scene');
-    if (!scene) { return; }
-
-    // buffer for recent lines
-    var maxLines = 20;
-    var lines = [];
-
-    function pushLine(prefix, args) {
-        var text = args.map(function (a) {
-            try {
-                if (typeof a === 'object') return JSON.stringify(a);
-                return String(a);
-            } catch (e) {
-                return String(a);
-            }
-        }).join(' ');
-        var timestamp = new Date().toLocaleTimeString();
-        lines.push('[' + timestamp + ']' + (prefix ? ' ' + prefix : '') + ' ' + text);
-        if (lines.length > maxLines) lines = lines.slice(lines.length - maxLines);
-        refreshText();
-    }
-
-    // create container at 0 1 0
-    var container = document.createElement('a-entity');
-    container.setAttribute('position', '0 1 0');
-
-    // background panel for readability
-    var bg = document.createElement('a-plane');
-    bg.setAttribute('width', '2');
-    bg.setAttribute('height', '1');
-    bg.setAttribute('color', '#111');
-    bg.setAttribute('material', 'opacity: 0.6; side: double');
-    bg.setAttribute('position', '0 0 0');
-    container.appendChild(bg);
-
-    // text element
-    var textEl = document.createElement('a-entity');
-    textEl.setAttribute('position', '-0.95 0 0.01'); // left align, slightly in front of panel
-    textEl.setAttribute('text', {
-        value: '',
-        align: 'left',
-        width: 1.9,
-        color: '#fff',
-        wrapCount: 40
-    });
-    container.appendChild(textEl);
-
-    scene.appendChild(container);
-
-    function refreshText() {
-        textEl.setAttribute('text', 'value', lines.join('\n'));
-    }
-
-    // preserve originals
-    var orig = {
-        log: console.log.bind(console),
-        info: console.info.bind(console),
-        warn: console.warn.bind(console),
-        error: console.error.bind(console)
-    };
-
-    // override console methods to mirror to text
-    console.log = function () {
-        orig.log.apply(null, arguments);
-        pushLine('', Array.prototype.slice.call(arguments));
-    };
-    console.info = function () {
-        orig.info.apply(null, arguments);
-        pushLine('INFO', Array.prototype.slice.call(arguments));
-    };
-    console.warn = function () {
-        orig.warn.apply(null, arguments);
-        pushLine('WARN', Array.prototype.slice.call(arguments));
-    };
-    console.error = function () {
-        orig.error.apply(null, arguments);
-        pushLine('ERROR', Array.prototype.slice.call(arguments));
-    };
-
-    // seed with a notice
-    pushLine('INFO', ['Console capture started']);
-});
-  </script>
-</head>
-
-<body>
-  <a-scene physics="driver: cannon; gravity: -9.8; debug: true" embedded>
-
-    <!-- ========== PLAYER SPHERE (physics root) ========== -->
-    <!-- sphere used as the player body; camera + hands are children -->
-    <a-entity id="player" position="0 1.2 0" dynamic-body="shape: sphere; sphereRadius: 0.4; mass: 80" player-controls debug-text>
-      <!-- a simple camera -->
-      <a-camera position="0 0.25 0"></a-camera>
-
-      <!-- LEFT HAND: joystick moves player; kinematic hand used for grabbing and for being a physics target -->
-      <a-entity id="leftHand"
-                class="hand"
-                kinematic-hand="radius:0.06"
-                grabber
-                hand-controls="left">
+      <!-- WORLD -->
+      <a-entity
+        environment="
+          preset: canyon;
+          ground: hills;
+          groundColor: #553311;
+          skyType: gradient;
+          skyColor: #88ccee;
+          horizonColor: #ddeeff;
+          lighting: distant;
+          lightPosition: 1 1 0;
+        ">
       </a-entity>
 
-      <!-- RIGHT HAND: same behavior -->
-      <a-entity id="rightHand"
-                class="hand"
-                kinematic-hand="radius:0.06"
-                grabber
-                hand-controls="right">
+      <!-- VEHICLE (this is what you tilt) -->
+      <a-entity id="vehicle" fly-forward>
+
+        <!-- CAMERA RIG -->
+        <a-entity id="rig" position="0 1.6 0">
+          <a-camera
+            wasd-controls="enabled: false"
+            look-controls="pointerLockEnabled: false">
+          </a-camera>
+        </a-entity>
+
       </a-entity>
-    </a-entity>
 
-    <!-- ========== Simple world ========== -->
-    <!-- floor -->
-    <a-box position="0 -0.6 0" static-body scale="40 1 40" color="#7BC8A4"></a-box>
-
-    <!-- platform to jump onto -->
-
-    <!-- some taller boxes you can jump onto -->
-    <a-box position="0 1.6 -6" static-body scale="2 0.6 2" color="#8F8"></a-box>
-
-    <!-- lights -->
-    <a-light type="ambient" intensity="0.6"></a-light>
-    <a-light type="directional" intensity="0.6" position="1 4 2"></a-light>
-
-    <!-- helpful cursor for desktop testing -->
-   
-  </a-scene>
-</body>
+    </a-scene>
+  </body>
 </html>
